@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC Index Ticker + Analysis</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0b0e11;
+    color: #fff;
+    font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .main-card {
+    background: #161a1e;
+    border-radius: 20px;
+    padding: 32px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    width: 100%;
+    max-width: 440px;
+    margin-bottom: 16px;
+  }
+  .label {
+    color: #848e9c;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .price {
+    font-size: 44px;
+    font-weight: 700;
+    transition: color 0.3s ease;
+    word-break: break-word;
+  }
+  .change {
+    font-size: 15px;
+    margin-top: 8px;
+    font-weight: 600;
+  }
+  .up { color: #0ecb81; }
+  .down { color: #f6465d; }
+  .neutral { color: #848e9c; }
+  .sources {
+    width: 100%;
+    max-width: 440px;
+    background: #161a1e;
+    border-radius: 16px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  .source-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 14px;
+    border-bottom: 1px solid #242830;
+  }
+  .source-row:last-child { border-bottom: none; }
+  .ex-name { color: #848e9c; }
+  .ex-price { font-weight: 600; }
+
+  .analysis-card {
+    width: 100%;
+    max-width: 440px;
+    background: #161a1e;
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .analysis-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .analysis-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: #f0b90b;
+  }
+  .analysis-time {
+    font-size: 11px;
+    color: #5e6673;
+  }
+  .bias-tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+  .bias-bullish { background: rgba(14,203,129,0.15); color: #0ecb81; }
+  .bias-bearish { background: rgba(246,70,93,0.15); color: #f6465d; }
+  .bias-neutral { background: rgba(132,142,156,0.15); color: #848e9c; }
+
+  .analysis-text {
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: #d8dee5;
+  }
+  .indicator-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .indicator-box {
+    background: #0b0e11;
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .indicator-label {
+    font-size: 10.5px;
+    color: #5e6673;
+    text-transform: uppercase;
+  }
+  .indicator-value {
+    font-size: 16px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+
+  .footer {
+    margin-top: 4px;
+    font-size: 10.5px;
+    color: #5e6673;
+    text-align: center;
+    line-height: 1.5;
+    max-width: 440px;
+  }
+  .pulse {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #0ecb81;
+    margin-right: 6px;
+    animation: blink 1.5s infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+</style>
+</head>
+<body>
+
+<div class="main-card">
+  <div class="label"><span class="pulse"></span>BTC / USD — Index Average</div>
+  <div class="price" id="indexPrice">$--,---</div>
+  <div class="change neutral" id="change">-- %</div>
+</div>
+
+<div class="sources" id="sources">
+  <div class="source-row"><span class="ex-name">Coinbase</span><span class="ex-price" id="p-coinbase">--</span></div>
+  <div class="source-row"><span class="ex-name">Kraken</span><span class="ex-price" id="p-kraken">--</span></div>
+  <div class="source-row"><span class="ex-name">Gemini</span><span class="ex-price" id="p-gemini">--</span></div>
+  <div class="source-row"><span class="ex-name">Binance.US</span><span class="ex-price" id="p-binanceus">--</span></div>
+  <div class="source-row"><span class="ex-name">OKX</span><span class="ex-price" id="p-okx">--</span></div>
+</div>
+
+<div class="analysis-card">
+  <div class="analysis-header">
+    <span class="analysis-title">📊 Market Analysis</span>
+    <span class="analysis-time" id="analysisTime">--</span>
+  </div>
+  <div id="biasTag" class="bias-tag bias-neutral">Loading...</div>
+  <div class="analysis-text" id="analysisText">Gathering market data...</div>
+  <div class="indicator-grid">
+    <div class="indicator-box">
+      <div class="indicator-label">RSI (14, 5m)</div>
+      <div class="indicator-value" id="rsiValue">--</div>
+    </div>
+    <div class="indicator-box">
+      <div class="indicator-label">Trend (20/50h)</div>
+      <div class="indicator-value" id="trendValue">--</div>
+    </div>
+    <div class="indicator-box">
+      <div class="indicator-label">1h Change</div>
+      <div class="indicator-value" id="change1h">--</div>
+    </div>
+    <div class="indicator-box">
+      <div class="indicator-label">24h Change</div>
+      <div class="indicator-value" id="change24h">--</div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Price updates every 3s · Analysis refreshes every 5 min<br>
+  Rule-based technical analysis engine — not financial advice
+</div>
+
+<script>
+/* ---------------- PRICE TICKER (updates every 3s) ---------------- */
+const indexPriceEl = document.getElementById('indexPrice');
+const changeEl = document.getElementById('change');
+let lastIndex = null;
+let openIndex = null;
+
+async function safeFetch(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('bad response');
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+async function getCoinbase() {
+  const d = await safeFetch('https://api.coinbase.com/v2/prices/BTC-USD/spot');
+  return d ? parseFloat(d.data.amount) : null;
+}
+async function getKraken() {
+  const d = await safeFetch('https://api.kraken.com/0/public/Ticker?pair=XBTUSD');
+  if (!d || !d.result) return null;
+  const key = Object.keys(d.result)[0];
+  return parseFloat(d.result[key].c[0]);
+}
+async function getGemini() {
+  const d = await safeFetch('https://api.gemini.com/v1/pubticker/btcusd');
+  return d ? parseFloat(d.last) : null;
+}
+async function getBinanceUS() {
+  const d = await safeFetch('https://api.binance.us/api/v3/ticker/price?symbol=BTCUSD');
+  return d ? parseFloat(d.price) : null;
+}
+async function getOKX() {
+  const d = await safeFetch('https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT');
+  if (!d || !d.data || !d.data[0]) return null;
+  return parseFloat(d.data[0].last);
+}
+
+function fmt(n) {
+  if (n === null || isNaN(n)) return 'N/A';
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function trimmedMean(values) {
+  const valid = values.filter(v => v !== null && !isNaN(v));
+  if (valid.length === 0) return null;
+  if (valid.length < 4) {
+    return valid.reduce((a, b) => a + b, 0) / valid.length;
+  }
+  const sorted = [...valid].sort((a, b) => a - b);
+  const trimmed = sorted.slice(1, -1);
+  return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+}
+
+async function updatePrice() {
+  const [cb, kr, ge, bu, ok] = await Promise.all([
+    getCoinbase(), getKraken(), getGemini(), getBinanceUS(), getOKX()
+  ]);
+
+  document.getElementById('p-coinbase').textContent = fmt(cb);
+  document.getElementById('p-kraken').textContent = fmt(kr);
+  document.getElementById('p-gemini').textContent = fmt(ge);
+  document.getElementById('p-binanceus').textContent = fmt(bu);
+  document.getElementById('p-okx').textContent = fmt(ok);
+
+  const index = trimmedMean([cb, kr, ge, bu, ok]);
+
+  if (index !== null) {
+    if (openIndex === null) openIndex = index;
+    indexPriceEl.textContent = fmt(index);
+    if (lastIndex !== null) {
+      indexPriceEl.style.color = index > lastIndex ? '#0ecb81' : index < lastIndex ? '#f6465d' : '#fff';
+    }
+    lastIndex = index;
+    const pct = ((index - openIndex) / openIndex) * 100;
+    changeEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(3) + '% (session)';
+    changeEl.className = 'change ' + (pct > 0 ? 'up' : pct < 0 ? 'down' : 'neutral');
+  } else {
+    indexPriceEl.textContent = 'Error';
+  }
+}
+
+updatePrice();
+setInterval(updatePrice, 3000);
+
+/* ---------------- ANALYSIS ENGINE (updates every 5 min) ---------------- */
+
+function calculateRSI(closes, period = 14) {
+  if (closes.length < period + 1) return null;
+  let gains = 0, losses = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff >= 0) gains += diff; else losses -= diff;
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
+
+function sma(values, period) {
+  if (values.length < period) return null;
+  const slice = values.slice(-period);
+  return slice.reduce((a, b) => a + b, 0) / period;
+}
+
+function pctChange(values, periodsAgo) {
+  if (values.length <= periodsAgo) return null;
+  const now = values[values.length - 1];
+  const then = values[values.length - 1 - periodsAgo];
+  return ((now - then) / then) * 100;
+}
+
+function volatility(values, period = 20) {
+  const slice = values.slice(-Math.min(period, values.length));
+  if (slice.length < 2) return null;
+  const returns = [];
+  for (let i = 1; i < slice.length; i++) {
+    returns.push((slice[i] - slice[i - 1]) / slice[i - 1]);
+  }
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;
+  return Math.sqrt(variance) * 100;
+}
+
+async function getOHLC(interval) {
+  const d = await safeFetch(`https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=${interval}`);
+  if (!d || !d.result) return null;
+  const key = Object.keys(d.result).find(k => k !== 'last');
+  if (!key) return null;
+  return d.result[key].map(c => parseFloat(c[4])); // closing prices
+}
+
+function pctStr(n) {
+  if (n === null || isNaN(n)) return 'N/A';
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+
+async function updateAnalysis() {
+  const [closes5m, closes1h] = await Promise.all([
+    getOHLC(5),
+    getOHLC(60)
+  ]);
+
+  if (!closes5m || !closes1h) {
+    document.getElementById('analysisText').textContent = 'Unable to fetch analysis data right now. Will retry shortly.';
+    return;
+  }
+
+  const rsi = calculateRSI(closes5m, 14);
+  const sma20 = sma(closes1h, 20);
+  const sma50 = sma(closes1h, Math.min(50, closes1h.length));
+  const change1h = pctChange(closes1h, 1);
+  const change4h = pctChange(closes1h, 4);
+  const change24h = pctChange(closes1h, Math.min(24, closes1h.length - 1));
+  const vol = volatility(closes1h, 20);
+  const currentPrice = closes1h[closes1h.length - 1];
+
+  // Determine trend
+  let trend = 'neutral';
+  let trendLabel = 'Sideways';
+  if (sma20 && sma50) {
+    if (sma20 > sma50 * 1.0015) { trend = 'bullish'; trendLabel = 'Uptrend'; }
+    else if (sma20 < sma50 * 0.9985) { trend = 'bearish'; trendLabel = 'Downtrend'; }
+  }
+
+  // RSI zone
+  let rsiZone = 'neutral';
+  let rsiText = 'sitting in neutral territory';
+  if (rsi !== null) {
+    if (rsi > 70) { rsiZone = 'overbought'; rsiText = 'in overbought territory, which can precede short-term pullbacks'; }
+    else if (rsi < 30) { rsiZone = 'oversold'; rsiText = 'in oversold territory, which can precede short-term bounces'; }
+    else if (rsi > 55) { rsiZone = 'bullish-lean'; rsiText = 'leaning toward bullish momentum'; }
+    else if (rsi < 45) { rsiZone = 'bearish-lean'; rsiText = 'leaning toward bearish momentum'; }
+  }
+
+  // Volatility description
+  let volText = 'relatively calm';
+  if (vol !== null && vol > 1.2) volText = 'elevated, meaning choppier price swings than usual';
+  else if (vol !== null && vol < 0.4) volText = 'unusually low, meaning a quiet, tight trading range';
+
+  // Scoring system for overall bias
+  let score = 0;
+  if (trend === 'bullish') score += 1;
+  if (trend === 'bearish') score -= 1;
+  if (rsiZone === 'bullish-lean') score += 1;
+  if (rsiZone === 'bearish-lean') score -= 1;
+  if (rsiZone === 'overbought') score -= 0.5;
+  if (rsiZone === 'oversold') score += 0.5;
+  if (change1h > 0.3) score += 0.5;
+  if (change1h < -0.3) score -= 0.5;
+  if (change4h > 0.5) score += 0.5;
+  if (change4h < -0.5) score -= 0.5;
+
+  let bias = 'neutral';
+  let biasLabel = 'Mixed / Neutral';
+  if (score >= 1.5) { bias = 'bullish'; biasLabel = 'Leaning Bullish'; }
+  else if (score <= -1.5) { bias = 'bearish'; biasLabel = 'Leaning Bearish'; }
+
+  // Build narrative
+  let narrative = `Bitcoin is currently trading around ${fmt(currentPrice)}. `;
+  narrative += `Over the medium term, the market is in a ${trendLabel.toLowerCase()} based on the 20-hour vs 50-hour moving average comparison. `;
+  narrative += `Short-term momentum (RSI) is ${rsiText}. `;
+
+  narrative += `Price has moved ${pctStr(change1h)} over the last hour, ${pctStr(change4h)} over the last 4 hours, and ${pctStr(change24h)} over the last 24 hours. `;
+  narrative += `Volatility is ${volText}. `;
+
+  if (bias === 'bullish') {
+    narrative += `Taken together, short-term signals are tilted toward continued upside, though momentum should be confirmed with volume and broader market conditions.`;
+  } else if (bias === 'bearish') {
+    narrative += `Taken together, short-term signals are tilted toward further downside risk, though reversals can happen quickly in crypto markets.`;
+  } else {
+    narrative += `Taken together, signals are mixed with no strong directional edge right now — often a sign of consolidation before the next move.`;
+  }
+
+  // Update DOM
+  document.getElementById('analysisText').textContent = narrative;
+  document.getElementById('rsiValue').textContent = rsi !== null ? rsi.toFixed(1) : 'N/A';
+  document.getElementById('trendValue').textContent = trendLabel;
+  document.getElementById('change1h').textContent = pctStr(change1h);
+  document.getElementById('change24h').textContent = pctStr(change24h);
+
+  const biasTagEl = document.getElementById('biasTag');
+  biasTagEl.textContent = biasLabel;
+  biasTagEl.className = 'bias-tag ' + (bias === 'bullish' ? 'bias-bullish' : bias === 'bearish' ? 'bias-bearish' : 'bias-neutral');
+
+  document.getElementById('analysisTime').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+updateAnalysis();
+setInterval(updateAnalysis, 300000); // every 5 minutes
+</script>
+
+</body>
+</html>
