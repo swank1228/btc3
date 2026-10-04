@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BTC Index Ticker + Analysis</title>
+<title>BTC Index Ticker + AI Analysis</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -108,6 +108,7 @@
     font-size: 14.5px;
     line-height: 1.6;
     color: #d8dee5;
+    white-space: pre-wrap;
   }
   .indicator-grid {
     display: grid;
@@ -129,6 +130,12 @@
     font-size: 16px;
     font-weight: 700;
     margin-top: 2px;
+  }
+  .ai-source-note {
+    font-size: 10px;
+    color: #5e6673;
+    margin-top: 14px;
+    font-style: italic;
   }
 
   .footer {
@@ -172,11 +179,11 @@
 
 <div class="analysis-card">
   <div class="analysis-header">
-    <span class="analysis-title">📊 Market Analysis</span>
+    <span class="analysis-title">🤖 AI Market Analysis</span>
     <span class="analysis-time" id="analysisTime">--</span>
   </div>
   <div id="biasTag" class="bias-tag bias-neutral">Loading...</div>
-  <div class="analysis-text" id="analysisText">Gathering market data...</div>
+  <div class="analysis-text" id="analysisText">Gathering market data and asking the AI...</div>
   <div class="indicator-grid">
     <div class="indicator-box">
       <div class="indicator-label">RSI (14, 5m)</div>
@@ -195,26 +202,32 @@
       <div class="indicator-value" id="change24h">--</div>
     </div>
   </div>
+  <div class="ai-source-note" id="aiSourceNote">Powered by Gemini AI</div>
 </div>
 
 <div class="footer">
-  Price updates every 3s · Analysis refreshes every 5 min<br>
-  Rule-based technical analysis engine — not financial advice
+  Price updates every 3s · AI analysis refreshes every 5 min<br>
+  Not financial advice — for informational purposes only
 </div>
 
 <script>
+/* ====================== CONFIG ====================== */
+const GEMINI_API_KEY = "AQ.Ab8RN6KkM5V0afv-_roRyJ1VGSKuY6KtpjwlVbHugZ6E8yq6eg"; // <-- paste your real key between the quotes
+const GEMINI_MODEL = "gemini-1.5-flash";
+
 /* ---------------- PRICE TICKER (updates every 3s) ---------------- */
 const indexPriceEl = document.getElementById('indexPrice');
 const changeEl = document.getElementById('change');
 let lastIndex = null;
 let openIndex = null;
 
-async function safeFetch(url) {
+async function safeFetch(url, options) {
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('bad response');
+    const res = await fetch(url, options);
+    if (!res.ok) throw new Error('bad response: ' + res.status);
     return await res.json();
   } catch (e) {
+    console.error('Fetch failed:', url, e);
     return null;
   }
 }
@@ -229,7 +242,7 @@ async function getKraken() {
   const key = Object.keys(d.result)[0];
   return parseFloat(d.result[key].c[0]);
 }
-async function getGemini() {
+async function getGeminiEx() {
   const d = await safeFetch('https://api.gemini.com/v1/pubticker/btcusd');
   return d ? parseFloat(d.last) : null;
 }
@@ -261,7 +274,7 @@ function trimmedMean(values) {
 
 async function updatePrice() {
   const [cb, kr, ge, bu, ok] = await Promise.all([
-    getCoinbase(), getKraken(), getGemini(), getBinanceUS(), getOKX()
+    getCoinbase(), getKraken(), getGeminiEx(), getBinanceUS(), getOKX()
   ]);
 
   document.getElementById('p-coinbase').textContent = fmt(cb);
@@ -290,7 +303,7 @@ async function updatePrice() {
 updatePrice();
 setInterval(updatePrice, 3000);
 
-/* ---------------- ANALYSIS ENGINE (updates every 5 min) ---------------- */
+/* ---------------- INDICATOR MATH (feeds the AI) ---------------- */
 
 function calculateRSI(closes, period = 14) {
   if (closes.length < period + 1) return null;
@@ -336,7 +349,7 @@ async function getOHLC(interval) {
   if (!d || !d.result) return null;
   const key = Object.keys(d.result).find(k => k !== 'last');
   if (!key) return null;
-  return d.result[key].map(c => parseFloat(c[4])); // closing prices
+  return d.result[key].map(c => parseFloat(c[4]));
 }
 
 function pctStr(n) {
@@ -344,6 +357,68 @@ function pctStr(n) {
   return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
 }
 
+/* ---------------- FALLBACK RULE-BASED NARRATIVE ---------------- */
+function buildFallbackNarrative(data) {
+  let narrative = `Bitcoin is currently trading around ${fmt(data.price)}. `;
+  narrative += `The market is in a ${data.trendLabel.toLowerCase()} based on moving averages. `;
+  narrative += `RSI is at ${data.rsi !== null ? data.rsi.toFixed(1) : 'N/A'}. `;
+  narrative += `Price has moved ${pctStr(data.change1h)} over 1h, ${pctStr(data.change4h)} over 4h, and ${pctStr(data.change24h)} over 24h. `;
+  narrative += `(AI analysis unavailable — showing backup rule-based summary.)`;
+  return narrative;
+}
+
+/* ---------------- GEMINI AI CALL ---------------- */
+async function askGemini(data) {
+  if (!GEMINI_API_KEY || GEMINI_API_KEY === "YOUR_API_KEY_HERE") {
+    return null; // no key set yet
+  }
+
+  const prompt = `You are a professional crypto market analyst writing a brief update for a live dashboard. Here is the current Bitcoin market data:
+
+- Current price: ${fmt(data.price)}
+- 20-hour vs 50-hour moving average trend: ${data.trendLabel}
+- RSI (14-period, 5-min candles): ${data.rsi !== null ? data.rsi.toFixed(1) : 'N/A'} (below 30 = oversold, above 70 = overbought)
+- Price change last 1 hour: ${pctStr(data.change1h)}
+- Price change last 4 hours: ${pctStr(data.change4h)}
+- Price change last 24 hours: ${pctStr(data.change24h)}
+- Recent volatility (20h stddev of returns): ${data.vol !== null ? data.vol.toFixed(2) + '%' : 'N/A'}
+
+Respond in EXACTLY this format:
+Line 1: A single word, either BULLISH, BEARISH, or NEUTRAL, representing your short-term (next few hours) directional bias.
+Then a blank line.
+Then a 3-4 sentence plain-English analysis of what's happening and what to watch for. Be specific, reference the actual numbers, and sound like a sharp human analyst — not generic filler. Do not give direct financial advice or tell people to buy/sell.`;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.7, maxOutputTokens: 300 }
+  };
+
+  const result = await safeFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!result || !result.candidates || !result.candidates[0]) return null;
+
+  try {
+    const text = result.candidates[0].content.parts[0].text.trim();
+    const lines = text.split('\n').filter(l => l.trim() !== '');
+    const firstWord = lines[0].trim().toUpperCase();
+    let bias = 'neutral';
+    if (firstWord.includes('BULLISH')) bias = 'bullish';
+    else if (firstWord.includes('BEARISH')) bias = 'bearish';
+    const narrative = lines.slice(1).join(' ').trim();
+    return { bias, narrative: narrative || text };
+  } catch (e) {
+    console.error('Error parsing Gemini response', e);
+    return null;
+  }
+}
+
+/* ---------------- MAIN ANALYSIS UPDATE LOOP ---------------- */
 async function updateAnalysis() {
   const [closes5m, closes1h] = await Promise.all([
     getOHLC(5),
@@ -351,7 +426,7 @@ async function updateAnalysis() {
   ]);
 
   if (!closes5m || !closes1h) {
-    document.getElementById('analysisText').textContent = 'Unable to fetch analysis data right now. Will retry shortly.';
+    document.getElementById('analysisText').textContent = 'Unable to fetch market data right now. Will retry shortly.';
     return;
   }
 
@@ -364,73 +439,42 @@ async function updateAnalysis() {
   const vol = volatility(closes1h, 20);
   const currentPrice = closes1h[closes1h.length - 1];
 
-  // Determine trend
-  let trend = 'neutral';
-  let trendLabel = 'Sideways';
+  let trendLabel = 'Sideways Trend';
   if (sma20 && sma50) {
-    if (sma20 > sma50 * 1.0015) { trend = 'bullish'; trendLabel = 'Uptrend'; }
-    else if (sma20 < sma50 * 0.9985) { trend = 'bearish'; trendLabel = 'Downtrend'; }
+    if (sma20 > sma50 * 1.0015) trendLabel = 'Uptrend';
+    else if (sma20 < sma50 * 0.9985) trendLabel = 'Downtrend';
   }
 
-  // RSI zone
-  let rsiZone = 'neutral';
-  let rsiText = 'sitting in neutral territory';
-  if (rsi !== null) {
-    if (rsi > 70) { rsiZone = 'overbought'; rsiText = 'in overbought territory, which can precede short-term pullbacks'; }
-    else if (rsi < 30) { rsiZone = 'oversold'; rsiText = 'in oversold territory, which can precede short-term bounces'; }
-    else if (rsi > 55) { rsiZone = 'bullish-lean'; rsiText = 'leaning toward bullish momentum'; }
-    else if (rsi < 45) { rsiZone = 'bearish-lean'; rsiText = 'leaning toward bearish momentum'; }
-  }
+  const data = { price: currentPrice, trendLabel, rsi, change1h, change4h, change24h, vol };
 
-  // Volatility description
-  let volText = 'relatively calm';
-  if (vol !== null && vol > 1.2) volText = 'elevated, meaning choppier price swings than usual';
-  else if (vol !== null && vol < 0.4) volText = 'unusually low, meaning a quiet, tight trading range';
-
-  // Scoring system for overall bias
-  let score = 0;
-  if (trend === 'bullish') score += 1;
-  if (trend === 'bearish') score -= 1;
-  if (rsiZone === 'bullish-lean') score += 1;
-  if (rsiZone === 'bearish-lean') score -= 1;
-  if (rsiZone === 'overbought') score -= 0.5;
-  if (rsiZone === 'oversold') score += 0.5;
-  if (change1h > 0.3) score += 0.5;
-  if (change1h < -0.3) score -= 0.5;
-  if (change4h > 0.5) score += 0.5;
-  if (change4h < -0.5) score -= 0.5;
-
-  let bias = 'neutral';
-  let biasLabel = 'Mixed / Neutral';
-  if (score >= 1.5) { bias = 'bullish'; biasLabel = 'Leaning Bullish'; }
-  else if (score <= -1.5) { bias = 'bearish'; biasLabel = 'Leaning Bearish'; }
-
-  // Build narrative
-  let narrative = `Bitcoin is currently trading around ${fmt(currentPrice)}. `;
-  narrative += `Over the medium term, the market is in a ${trendLabel.toLowerCase()} based on the 20-hour vs 50-hour moving average comparison. `;
-  narrative += `Short-term momentum (RSI) is ${rsiText}. `;
-
-  narrative += `Price has moved ${pctStr(change1h)} over the last hour, ${pctStr(change4h)} over the last 4 hours, and ${pctStr(change24h)} over the last 24 hours. `;
-  narrative += `Volatility is ${volText}. `;
-
-  if (bias === 'bullish') {
-    narrative += `Taken together, short-term signals are tilted toward continued upside, though momentum should be confirmed with volume and broader market conditions.`;
-  } else if (bias === 'bearish') {
-    narrative += `Taken together, short-term signals are tilted toward further downside risk, though reversals can happen quickly in crypto markets.`;
-  } else {
-    narrative += `Taken together, signals are mixed with no strong directional edge right now — often a sign of consolidation before the next move.`;
-  }
-
-  // Update DOM
-  document.getElementById('analysisText').textContent = narrative;
   document.getElementById('rsiValue').textContent = rsi !== null ? rsi.toFixed(1) : 'N/A';
   document.getElementById('trendValue').textContent = trendLabel;
   document.getElementById('change1h').textContent = pctStr(change1h);
   document.getElementById('change24h').textContent = pctStr(change24h);
 
   const biasTagEl = document.getElementById('biasTag');
-  biasTagEl.textContent = biasLabel;
-  biasTagEl.className = 'bias-tag ' + (bias === 'bullish' ? 'bias-bullish' : bias === 'bearish' ? 'bias-bearish' : 'bias-neutral');
+  const analysisTextEl = document.getElementById('analysisText');
+  const noteEl = document.getElementById('aiSourceNote');
+
+  analysisTextEl.textContent = 'Asking Gemini AI for analysis...';
+
+  const aiResult = await askGemini(data);
+
+  if (aiResult) {
+    analysisTextEl.textContent = aiResult.narrative;
+    biasTagEl.textContent = aiResult.bias.charAt(0).toUpperCase() + aiResult.bias.slice(1);
+    biasTagEl.className = 'bias-tag ' + (aiResult.bias === 'bullish' ? 'bias-bullish' : aiResult.bias === 'bearish' ? 'bias-bearish' : 'bias-neutral');
+    noteEl.textContent = 'Powered by Gemini AI';
+  } else {
+    // fallback to rule-based
+    analysisTextEl.textContent = buildFallbackNarrative(data);
+    let fallbackBias = 'neutral';
+    if (trendLabel === 'Uptrend' && change1h > 0) fallbackBias = 'bullish';
+    if (trendLabel === 'Downtrend' && change1h < 0) fallbackBias = 'bearish';
+    biasTagEl.textContent = fallbackBias.charAt(0).toUpperCase() + fallbackBias.slice(1) + ' (offline)';
+    biasTagEl.className = 'bias-tag ' + (fallbackBias === 'bullish' ? 'bias-bullish' : fallbackBias === 'bearish' ? 'bias-bearish' : 'bias-neutral');
+    noteEl.textContent = 'AI unavailable — showing backup analysis';
+  }
 
   document.getElementById('analysisTime').textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
